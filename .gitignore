@@ -1,10 +1,15 @@
 # Temporary Cathy build files
-payload.block
-payload-header
-final-payload
-part1
-part2
-extracted-data.txt
+# Editor files
+*~
+*.swp
+
+# Cathy temporary files
+*.cathy-new
+*.cathy-insert
+
+# Backup files
+*.bak
+*.old
 
 # Development backups
 *.bak*
