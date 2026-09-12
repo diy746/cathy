@@ -1,0 +1,24 @@
+CATHY HELP
+
+Create • Protect • Restore
+
+Usage:
+  cathy [options] filename
+
+Options:
+  -q   quiet
+  -r   raw mode
+  -x   no chmod +x
+  -n   dry run
+  -c   clean CRLF
+  -b   no backup
+  -p   show path
+  -i   insert mode
+  -v   version
+  -h   help
+
+Cathy is a POSIX shell utility designed for:
+- normal Linux
+- BusyBox
+- recovery shells
+- limited environments

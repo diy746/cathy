@@ -1,0 +1,16 @@
+modules:
+
+ - name: story
+   priority: 1
+
+ - name: tutorial
+   priority: 2
+
+ - name: help
+   priority: 3
+
+ - name: version
+   priority: 4
+
+ - name: credits
+   priority: 5

@@ -1,0 +1,689 @@
+#!/bin/sh
+#
+# CATHY 4.0.0
+# Create • Protect • Restore
+#
+# Hardened cat for safe script creation
+# (c) 2026 JW diy746
+#
+
+VERSION="4.0.0"
+
+# predictable safe file permissions
+umask 022
+
+FILE=""
+QUIET=0
+RAW=0
+NOEXEC=0
+CRUSH=0
+NOBACKUP=0
+DRYRUN=0
+INSERT=0
+PATCH=0
+PATHINFO=0
+
+
+# ---------- basic output ----------
+
+say()
+{
+    [ "$QUIET" -eq 0 ] && echo "$*"
+}
+
+
+warn()
+{
+    echo "[CATHY WARNING] $*"
+}
+
+
+fail_safe()
+{
+    echo
+    echo "[CATHY STOP]"
+    echo "$*"
+    echo "No changes were made."
+    exit 1
+}
+
+
+# ---------- command detection ----------
+
+have()
+{
+    command -v "$1" >/dev/null 2>&1
+}
+
+
+# ---------- BusyBox support ----------
+
+BB=""
+
+for p in \
+/bin/busybox \
+/usr/bin/busybox \
+/sbin/busybox \
+/system/bin/busybox \
+/system/xbin/busybox
+do
+    [ -x "$p" ] && BB="$p" && break
+done
+
+
+ms_cp()
+{
+    if have cp; then
+        cp "$@"
+    elif [ -n "$BB" ]; then
+        "$BB" cp "$@"
+    else
+        return 1
+    fi
+}
+
+
+ms_mv()
+{
+    if have mv; then
+        mv "$@"
+    elif [ -n "$BB" ]; then
+        "$BB" mv "$@"
+    else
+        return 1
+    fi
+}
+
+
+ms_chmod()
+{
+    if have chmod; then
+        chmod "$@"
+    elif [ -n "$BB" ]; then
+        "$BB" chmod "$@"
+    else
+        return 1
+    fi
+}
+
+
+ms_mkdir()
+{
+    if have mkdir; then
+        mkdir "$@"
+    elif [ -n "$BB" ]; then
+        "$BB" mkdir "$@"
+    else
+        return 1
+    fi
+}
+
+
+# ---------- backup ----------
+
+make_backup()
+{
+    [ "$NOBACKUP" -eq 1 ] && return 0
+
+    [ -f "$FILE" ] || return 0
+
+    BACKUP="$FILE.bak.$(date +%Y%m%d%H%M%S)"
+
+    say "Backup:"
+    say " $BACKUP"
+
+    ms_cp "$FILE" "$BACKUP" ||
+        fail_safe "Cannot create backup."
+}
+
+
+# ---------- terminal safety ----------
+
+terminal_safe()
+{
+    stty sane 2>/dev/null
+}
+
+
+# ---------- CRLF cleaning ----------
+
+clean_crlf()
+{
+    [ "$CRUSH" -eq 0 ] && return 0
+
+    if have sed; then
+        sed -i 's/\r$//' "$FILE" 2>/dev/null && return 0
+    fi
+
+    if have tr; then
+        TMP="$FILE.cathy-clean"
+
+        tr -d '\r' < "$FILE" > "$TMP" &&
+        ms_mv "$TMP" "$FILE" &&
+        return 0
+    fi
+
+    warn "Cannot remove CRLF. File unchanged."
+}
+
+
+# ---------- permissions ----------
+
+set_permissions()
+{
+    [ "$NOEXEC" -eq 1 ] && return 0
+
+    ms_chmod 755 "$FILE" ||
+        warn "Cannot set executable permission."
+}
+
+# ---------- usage ----------
+
+usage()
+{
+cat <<EOF
+
+CATHY $VERSION
+Create • Protect • Restore
+
+Usage:
+ cathy [options] filename
+
+Options:
+ -q   quiet
+ -r   raw mode
+ -x   no chmod +x
+ -n   dry run
+ -c   clean CRLF
+ -b   no backup
+ -p   show path
+ -i   insert mode
+ -v   version
+ -h   help
+
+EOF
+}
+
+
+version()
+{
+cat <<EOF
+
+CATHY $VERSION
+
+Create • Protect • Restore
+
+A hardened cat for scripts.
+
+Origin:
+cat <<'FINE'
+text
+FINE
+
+Designed for:
+- normal Linux
+- BusyBox
+- recovery shells
+- limited environments
+
+Safety rule:
+
+Cathy may fail.
+Cathy must not damage.
+
+Author:
+JW e-mail diy746@gmx.it.
+
+EOF
+}
+
+
+# ---------- argument parser ----------
+
+# ---------- Cathy embedded modules ----------
+
+# Cathy compressed module
+# Module: credits
+CREDITS_DATA='H4sICKNXpWoCA2NyZWRpdHMALY/BSsNAEIbv+xRz1EOKFKnQk7YVrAiWtqIe02SaDGx2lp1Jyd58Fh/NJ3ESPe0ww7/f968fjk+fsN4/brbHg3PrhKUi/Hx9wy6xYqXTvEdRTujcqiev0AuFBt4CDVCGGnavh+0HSIveQ0wUKooeZebcNkikhDWc8tIVf4GKu85ChaeAEFvyLBzbbGdR25ep/v/JcpatlDjYMXLS8uQRFAc1Clcok4UyezFUZ8wOg5ZjYOme360Mx5yoaRWuqmuY38wXrqZ8d7u4b7phRurcBoWaYIJnTqPhC4V+sHfVS17xOJkBXzBlwHChxGFEiO2nzoWViQYcvSSLYifuF8hUqr5RAQAA'
+# Cathy compressed module
+# Module: help
+HELP_DATA='H4sICKNXpWoCA2hlbHAAPY9NTsNADEb3cwrvUS/QHY1ARYrUqoAEQiymE7exmHhSj5MmO87C0TgJnkZi5/fkzz/V/cv2HbYP9d65StArwu/3D+wlKQa91QfMmgSde83+jGsHELy2M3ykXilx/oQTRWTfWctuUaVpdQGAy0CoBcRA/BW61GDhyZgThNYE3E1FsalGZpCBCwbDENEzVIf6sZjjkjn68DX0RfQmcpuu0NtBRZAJ4oyi/4tGUyNKtrMKtoYtxt6+vT1BGTzsd89PbzYJY4RBKZLO0GCmM2MDpyRrt7LF0vkINfEwGW6GPG9SqQRDsgXzks9mInWklkQeSRJ3yJrdH+J/ofppAQAA'
+# Cathy compressed module
+# Module: story
+STORY_DATA='H4sICKNXpWoCA3N0b3J5ABXMMQ6CQBBG4X5P8V9ADmBnbLTCCIWUAzOwE4ddwg4h3F5sXve9+619dGja+t2FcCePB7SAsOTVqTfBq26eH5QoZthcTf2oQmijYMpk1zDkudckKDSeGVZdHJESm6YJu3qEzL0wC+Ob8m7Ck2DOvJmUoKkoC/Lfi42XISen88YY1aQKPxnXLoOeAAAA'
+# Cathy compressed module
+# Module: tutorial
+TUTORIAL_DATA='H4sICKNXpWoCA3R1dG9yaWFsADWNOw7CMBBE+z3FnoAKUdCZUIAEQkKmoHSym2QlO7a8jviIwxMjUc28V8w0xh7uaG/2cj2aE8A50uxZ0WXGLoaUWZUJ3UTIoWWiBWQqEcvI2LgyvlC7LKmsAHazeMLex8cWoPCzAH5geEuq2Trlzbq2vbEGw++noso0+P9WL4v8AoM8KICUAAAA'
+# Cathy compressed module
+# Module: version
+VERSION_DATA='H4sICKNXpWoCA3ZlcnNpb24ALY5NTgMxDIX3PoWXsGA0qqoizYpq1IoiQasW8bPMJO5MRCaJEgcxO87C0TgJbsvqffbTe3a7fL5/x5fV/rDZPgG053Fe1VUtQyLFhL/fP7hLgUnzmfeUOSQCWPneempgtz1s3jAP5BzAWjIlUW7gBmNIrDpHFw9DpKTYBi9WVkfCoxVvUN4463tZdkp/lIi5xFNSFjR2ZAwZ1GGMUpoFx2CKowzweIHTIamPIp+U8n+9fDiJchGwygnqRMay5NoQp2T7gRu40tc4q2cLfHgFWBYeQmrA2Ol2vrjrx6/KMvwBglj65yEBAAA='
+while [ $# -gt 0 ]
+do
+
+# ---------- Cathy knowledge data ----------
+
+
+
+
+
+show_story()
+{
+    show_compressed "$STORY_DATA"
+}
+
+
+show_tutorial()
+{
+    show_compressed "$TUTORIAL_DATA"
+}
+
+
+show_credits()
+{
+cat <<CATHY_CREDITS
+CATHY
+
+Create • Protect • Restore
+
+Copyright (c) 2026 JW e-mail diy746@gmx.it
+CATHY_CREDITS
+}
+
+# ---------- Cathy compressed knowledge ----------
+
+show_compressed()
+{
+    DATA="$1"
+
+    if command -v base64 >/dev/null 2>&1 &&
+       command -v gzip >/dev/null 2>&1
+    then
+        printf "%s" "$DATA" | base64 -d | gzip -d
+        return
+    fi
+
+    echo "[CATHY INFO]"
+    echo "Compressed knowledge tools unavailable."
+    echo "Core Cathy functions still work."
+}
+
+
+case "$1" in
+
+-q|--quiet)
+    QUIET=1
+    ;;
+
+-r|--raw)
+    RAW=1
+    ;;
+
+-x|--no-exec)
+    NOEXEC=1
+    ;;
+
+-n|--dry-run)
+    DRYRUN=1
+    ;;
+
+-c|--crush)
+    CRUSH=1
+    ;;
+
+-b|--no-backup)
+    NOBACKUP=1
+    ;;
+
+-p|--path)
+    PATHINFO=1
+    ;;
+
+-i|--insert)
+    INSERT=1
+    ;;
+
+-v|--version)
+    version
+    exit 0
+    ;;
+
+-h|--help)
+    usage
+    exit 0
+    ;;
+
+--)
+    shift
+    break
+    ;;
+
+--story)
+    show_story
+    exit 0
+    ;;
+
+--tutorial)
+    show_tutorial
+    exit 0
+    ;;
+
+--credits)
+    show_credits
+    exit 0
+    ;;
+
+--self-check)
+    echo "CATHY SELF CHECK"
+    echo "OK - parser working"
+    exit 0
+    ;;
+
+-*)
+    echo "Unknown option: $1"
+    usage
+    exit 1
+    ;;
+
+*)
+    FILE="$1"
+    ;;
+esac
+
+shift
+
+done
+
+
+[ -z "$FILE" ] &&
+{
+    usage
+    exit 1
+}
+
+
+# ---------- path information ----------
+
+if [ "$PATHINFO" -eq 1 ]; then
+
+echo "[CATHY PATH]"
+echo "File:"
+echo "$FILE"
+
+if [ -e "$FILE" ]; then
+    ls -l "$FILE"
+else
+    echo "New file"
+fi
+
+fi
+
+
+# ---------- dry run ----------
+
+if [ "$DRYRUN" -eq 1 ]; then
+
+echo
+echo "[CATHY DRY RUN]"
+echo "Target:"
+echo "$FILE"
+
+if [ -f "$FILE" ]; then
+    echo "Backup:"
+    echo "$FILE.bak.DATE"
+else
+    echo "No existing file."
+fi
+
+echo
+echo "Executable:"
+if [ "$NOEXEC" -eq 1 ]; then
+    echo "No"
+else
+    echo "Yes"
+fi
+
+echo
+printf "Show current content? [y/N] "
+read answer
+
+case "$answer" in
+y|Y)
+
+    if have nl; then
+        nl -ba "$FILE"
+    elif have awk; then
+        awk '{printf "%6d  %s\n",NR,$0}' "$FILE"
+    else
+        cat "$FILE"
+    fi
+
+;;
+
+esac
+
+
+echo
+echo "Dry run finished."
+exit 0
+
+fi
+
+
+# ---------- prepare file ----------
+
+make_backup
+
+
+if [ "$RAW" -eq 1 ]; then
+
+    :
+else
+
+    if [ ! -e "$FILE" ]; then
+
+        {
+        echo '#!/bin/sh'
+        echo '# Created with Cathy'
+        echo
+        } > "$FILE"
+
+    fi
+
+fi
+
+
+terminal_safe
+
+
+echo
+echo "Paste content."
+echo "Finish with CTRL+D"
+echo "----------------"
+
+
+cat >> "$FILE"
+
+
+terminal_safe
+
+
+clean_crlf
+
+
+set_permissions
+
+
+echo
+echo "[✓] Cathy finished:"
+echo "$FILE"
+# ---------- insert mode ----------
+
+insert_mode()
+{
+    echo
+    echo "[CATHY INSERT]"
+
+    printf "Insert after line: "
+    read LINE
+
+    case "$LINE" in
+        ''|*[!0-9]*)
+            fail_safe "Invalid line number."
+            ;;
+    esac
+
+    TMP="$FILE.cathy-insert"
+
+    [ -f "$FILE" ] ||
+        fail_safe "File does not exist."
+
+    echo
+    echo "Paste new block."
+    echo "Finish with CTRL+D"
+    echo "----------------"
+
+    terminal_safe
+
+    if have head && have tail; then
+
+        head -n "$LINE" "$FILE" > "$TMP"
+
+        cat >> "$TMP"
+
+        tail -n +"$((LINE+1))" "$FILE" >> "$TMP"
+
+    else
+
+        fail_safe "head/tail unavailable."
+
+    fi
+
+    terminal_safe
+
+    echo
+    echo "Preview:"
+    echo
+
+    if have diff; then
+        diff -u "$FILE" "$TMP"
+    fi
+
+    printf "Replace original? [y/N] "
+    read ANSWER
+
+    case "$ANSWER" in
+    y|Y)
+        make_backup
+        ms_mv "$TMP" "$FILE" ||
+            fail_safe "Replacement failed."
+
+        set_permissions
+
+        echo "[✓] Insert completed."
+        ;;
+
+    *)
+        rm -f "$TMP"
+        echo "Cancelled. Original unchanged."
+        ;;
+    esac
+}
+
+
+# ---------- patch mode ----------
+
+patch_mode()
+{
+    NEW="$FILE.cathy-new"
+
+    [ -f "$FILE" ] ||
+        fail_safe "File does not exist."
+
+    make_backup
+
+    ms_cp "$FILE" "$NEW" ||
+        fail_safe "Cannot create working copy."
+
+    echo
+    echo "Edit this file:"
+    echo "$NEW"
+    echo
+
+    echo "When finished run:"
+    echo " cathy --apply $FILE"
+}
+
+
+# ---------- apply patch ----------
+
+apply_patch()
+{
+    NEW="$FILE.cathy-new"
+
+    [ -f "$NEW" ] ||
+        fail_safe "No Cathy patch file found."
+
+    echo
+    echo "[CATHY APPLY]"
+
+    if have diff; then
+        diff -u "$FILE" "$NEW"
+    fi
+
+    printf "Replace original? [y/N] "
+    read ANSWER
+
+    case "$ANSWER" in
+
+    y|Y)
+
+        make_backup
+
+        ms_mv "$NEW" "$FILE" ||
+            fail_safe "Cannot replace file."
+
+        set_permissions
+
+        echo "[✓] Patch applied."
+
+        ;;
+
+    *)
+
+        echo "Cancelled."
+        ;;
+
+    esac
+}
+
+
+# ---------- final mode selection ----------
+
+if [ "$INSERT" -eq 1 ]; then
+    insert_mode
+    exit 0
+fi
+# ---------- Cathy safety additions ----------
+
+check_file()
+{
+    TARGET="$1"
+
+    [ -f "$TARGET" ] ||
+    fail_safe "File does not exist."
+
+    if sh -n "$TARGET" 2>/dev/null; then
+        echo "[✓] Syntax OK"
+    else
+        echo "[CATHY ERROR]"
+        echo "Shell syntax problem detected."
+        exit 1
+    fi
+}
+
+# ---------- Cathy knowledge hooks ----------
+
+
+# ---------- Cathy embedded modules ----------
+
+# Cathy compressed module

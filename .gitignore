@@ -1,0 +1,14 @@
+# Temporary Cathy build files
+payload.block
+payload-header
+final-payload
+part1
+part2
+extracted-data.txt
+
+# Development backups
+*.bak*
+*.backup*
+*.before-*
+cathy-*.sh
+cathy-*.diff
